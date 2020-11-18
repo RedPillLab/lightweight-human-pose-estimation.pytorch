@@ -11,9 +11,9 @@ import pycocotools.mask
 
 from torch.utils.data.dataset import Dataset
 
-BODY_PARTS_KPT_IDS = [[1, 8], [8, 9], [9, 10], [1, 11], [11, 12], [12, 13], [1, 2], [2, 3], [3, 4], [2, 16],
-                      [1, 5], [5, 6], [6, 7], [5, 17], [1, 0], [0, 14], [0, 15], [14, 16], [15, 17]]
-
+BODY_PARTS_KPT_IDS = [[1,8], [9,10], [10,11], [8,9], [8,12], [12,13], [13,14], [1,2], [2,3], [3,4],
+                      [2,17], [1,5], [5,6], [6,7], [5,18], [1,0], [0,15], [0,16], [15,17], [16,18],
+                      [14,19], [19,20], [14,21], [11,22], [22,23], [11,24]]
 
 def get_mask(segmentations, mask):
     for segmentation in segmentations:
@@ -21,8 +21,7 @@ def get_mask(segmentations, mask):
         mask[pycocotools.mask.decode(rle) > 0.5] = 0
     return mask
 
-
-class CocoTrainDataset(Dataset):
+class Body25TrainDataset(Dataset):
     def __init__(self, labels, images_folder, stride, sigma, paf_thickness, transform=None):
         super().__init__()
         self._images_folder = images_folder
@@ -46,7 +45,8 @@ class CocoTrainDataset(Dataset):
         if self._transform:
             sample = self._transform(sample)
 
-        mask = cv2.resize(sample['mask'], dsize=None, fx=1/self._stride, fy=1/self._stride, interpolation=cv2.INTER_AREA)
+        mask = cv2.resize(sample['mask'], dsize=None, fx=1/self._stride, fy=1/self._stride,
+                          interpolation=cv2.INTER_AREA)
         keypoint_maps = self._generate_keypoint_maps(sample)
         sample['keypoint_maps'] = keypoint_maps
         keypoint_mask = np.zeros(shape=keypoint_maps.shape, dtype=np.float32)
@@ -71,20 +71,22 @@ class CocoTrainDataset(Dataset):
         return len(self._labels)
 
     def _generate_keypoint_maps(self, sample):
-        n_keypoints = 18
+        n_keypoints = 25
         n_rows, n_cols, _ = sample['image'].shape
-        keypoint_maps = np.zeros(shape=(n_keypoints + 1,
-                                        n_rows // self._stride, n_cols // self._stride), dtype=np.float32)  # +1 for bg
+        keypoint_maps = np.zeros(shape=(n_keypoints + 1, n_rows // self._stride, n_cols // self._stride),
+                                 dtype=np.float32)  # +1 for bg
 
         label = sample['label']
         for keypoint_idx in range(n_keypoints):
             keypoint = label['keypoints'][keypoint_idx]
             if keypoint[2] <= 1:
-                self._add_gaussian(keypoint_maps[keypoint_idx], keypoint[0], keypoint[1], self._stride, self._sigma)
+                self._add_gaussian(keypoint_maps[keypoint_idx], keypoint[0], keypoint[1],
+                                   self._stride, self._sigma)
             for another_annotation in label['processed_other_annotations']:
                 keypoint = another_annotation['keypoints'][keypoint_idx]
                 if keypoint[2] <= 1:
-                    self._add_gaussian(keypoint_maps[keypoint_idx], keypoint[0], keypoint[1], self._stride, self._sigma)
+                    self._add_gaussian(keypoint_maps[keypoint_idx], keypoint[0], keypoint[1],
+                                       self._stride, self._sigma)
         keypoint_maps[-1] = 1 - keypoint_maps.max(axis=0)
         return keypoint_maps
 
@@ -114,7 +116,8 @@ class CocoTrainDataset(Dataset):
     def _generate_paf_maps(self, sample):
         n_pafs = len(BODY_PARTS_KPT_IDS)
         n_rows, n_cols, _ = sample['image'].shape
-        paf_maps = np.zeros(shape=(n_pafs * 2, n_rows // self._stride, n_cols // self._stride), dtype=np.float32)
+        paf_maps = np.zeros(shape=(n_pafs * 2, n_rows // self._stride, n_cols // self._stride),
+                            dtype=np.float32)
 
         label = sample['label']
         for paf_idx in range(n_pafs):
@@ -161,7 +164,7 @@ class CocoTrainDataset(Dataset):
                     paf_map[1, y, x] = y_ba
 
 
-class CocoValDataset(Dataset):
+class Body25ValDataset(Dataset):
     def __init__(self, labels, images_folder):
         super().__init__()
         with open(labels, 'r') as f:

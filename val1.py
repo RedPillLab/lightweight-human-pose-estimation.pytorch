@@ -8,11 +8,10 @@ from pycocotools.cocoeval import COCOeval
 
 import torch
 
-from datasets.coco import CocoValDataset
+from datasets.body25 import Body25ValDataset
 from models.with_mobilenet import PoseEstimationWithMobileNet
-from modules.keypoints import extract_keypoints, group_keypoints
+from modules.keypoints_1 import extract_keypoints, group_keypoints
 from modules.load_state import load_state
-
 
 def run_coco_eval(gt_file_path, dt_file_path):
     annotation_type = 'keypoints'
@@ -26,12 +25,10 @@ def run_coco_eval(gt_file_path, dt_file_path):
     result.accumulate()
     result.summarize()
 
-
 def normalize(img, img_mean, img_scale):
     img = np.array(img, dtype=np.float32)
     img = (img - img_mean) * img_scale
     return img
-
 
 def pad_width(img, stride, pad_value, min_dims):
     h, w, _ = img.shape
@@ -48,20 +45,19 @@ def pad_width(img, stride, pad_value, min_dims):
                                     cv2.BORDER_CONSTANT, value=pad_value)
     return padded_img, pad
 
-
 def convert_to_coco_format(pose_entries, all_keypoints):
     coco_keypoints = []
     scores = []
     for n in range(len(pose_entries)):
         if len(pose_entries[n]) == 0:
             continue
-        keypoints = [0] * 17 * 3
-        to_coco_map = [0, -1, 6, 8, 10, 5, 7, 9, 12, 14, 16, 11, 13, 15, 2, 1, 4, 3]
+        keypoints = [0] * 23 * 3
+        to_coco_map = [0,-1,6,8,10,5,7,9,-1,12,14,16,11,13,15,2,1,4,3,17,18,19,20,21,22]
         person_score = pose_entries[n][-2]
         position_id = -1
         for keypoint_id in pose_entries[n][:-2]:
             position_id += 1
-            if position_id == 1:  # no 'neck' in COCO
+            if position_id == 1 or position_id == 8: # no 'neck', 'center hip'
                 continue
 
             cx, cy, score, visibility = 0, 0, 0, 0  # keypoint not found
@@ -74,16 +70,17 @@ def convert_to_coco_format(pose_entries, all_keypoints):
             keypoints[to_coco_map[position_id] * 3 + 1] = cy
             keypoints[to_coco_map[position_id] * 3 + 2] = visibility
         coco_keypoints.append(keypoints)
-        scores.append(person_score * max(0, (pose_entries[n][-1] - 1)))  # -1 for 'neck'
+        scores.append(person_score * max(0, (pose_entries[n][-1] - 2)))  # -2 for 'neck' and 'hip'
     return coco_keypoints, scores
 
 
-def infer(net, img, scales, base_height, stride, pad_value=(0, 0, 0), img_mean=(128, 128, 128), img_scale=1/256):
+def infer(net, img, scales, base_height, stride,
+          pad_value=(0, 0, 0), img_mean=(128, 128, 128), img_scale=1/256):
     normed_img = normalize(img, img_mean, img_scale)
     height, width, _ = normed_img.shape
     scales_ratios = [scale * base_height / float(height) for scale in scales]
-    avg_heatmaps = np.zeros((height, width, 19), dtype=np.float32)
-    avg_pafs = np.zeros((height, width, 38), dtype=np.float32)
+    avg_heatmaps = np.zeros((height, width, 26), dtype=np.float32)
+    avg_pafs = np.zeros((height, width, 52), dtype=np.float32)
 
     for ratio in scales_ratios:
         scaled_img = cv2.resize(normed_img, (0, 0), fx=ratio, fy=ratio, interpolation=cv2.INTER_CUBIC)
@@ -118,7 +115,7 @@ def evaluate(labels, output_name, images_folder, net, multiscale=False, visualiz
         scales = [0.5, 1.0, 1.5, 2.0]
     stride = 8
 
-    dataset = CocoValDataset(labels, images_folder)
+    dataset = Body25ValDataset(labels, images_folder)
     coco_result = []
     for sample in dataset:
         file_name = sample['file_name']
@@ -128,10 +125,11 @@ def evaluate(labels, output_name, images_folder, net, multiscale=False, visualiz
 
         total_keypoints_num = 0
         all_keypoints_by_type = []
-        for kpt_idx in range(18):  # 19th for bg
-            total_keypoints_num += extract_keypoints(avg_heatmaps[:, :, kpt_idx], all_keypoints_by_type, total_keypoints_num)
+        for kpt_idx in range(25):  # 26th for bg
+            total_keypoints_num += extract_keypoints(avg_heatmaps[:,:,kpt_idx], all_keypoints_by_type,
+                                                     total_keypoints_num)
 
-        pose_entries, all_keypoints = group_keypoints(all_keypoints_by_type, avg_pafs)
+        pose_entries, all_keypoints = group_keypoints(all_keypoints_by_type, avg_pafs, pose_entry_size=27)
 
         coco_keypoints, scores = convert_to_coco_format(pose_entries, all_keypoints)
 
@@ -154,10 +152,11 @@ def evaluate(labels, output_name, images_folder, net, multiscale=False, visualiz
             if key == 27:  # esc
                 return
 
-    with open(output_name, 'w') as f:
-        json.dump(coco_result, f, indent=4)
+    if len(coco_result) > 0:
+        with open(output_name, 'w') as f:
+            json.dump(coco_result, f, indent=4)
 
-    run_coco_eval(labels, output_name)
+        run_coco_eval(labels, output_name)
 
 
 if __name__ == '__main__':
@@ -167,18 +166,19 @@ if __name__ == '__main__':
     #                     help='name of output json file with detected keypoints')
     # parser.add_argument('--images-folder', type=str, required=True, help='path to COCO val images folder')
     # parser.add_argument('--checkpoint-path', type=str, required=True, help='path to the checkpoint')
-    # parser.add_argument('--multiscale', action='store_true', help='average inference results over multiple scales')
+    # parser.add_argument('--multiscale', action='store_true',
+    #                     help='average inference results over multiple scales')
     # parser.add_argument('--visualize', action='store_true', help='show keypoints')
     # args = parser.parse_args()
 
-    # net = PoseEstimationWithMobileNet()
+    # net = PoseEstimationWithMobileNet(num_heatmaps=26, num_pafs=52)
     # checkpoint = torch.load(args.checkpoint_path)
     # load_state(net, checkpoint)
 
     # evaluate(args.labels, args.output_name, args.images_folder, net, args.multiscale, args.visualize)
 
-    net = PoseEstimationWithMobileNet()
-    checkpoint = torch.load('default_checkpoints/checkpoint_iter_65000.pth')
+    net = PoseEstimationWithMobileNet(num_heatmaps=26, num_pafs=52)
+    checkpoint = torch.load('body25_checkpoints/checkpoint_iter_500.pth')
     load_state(net, checkpoint)
 
-    evaluate('data/val_subset.json', 'data/detections_65000.json', 'coco/val2017/', net, True, False)
+    evaluate('data/val_subset_1.json', 'data/detections.json', 'coco/val2017/', net, True, False)
