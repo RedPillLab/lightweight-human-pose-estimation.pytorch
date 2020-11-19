@@ -181,4 +181,4 @@ if __name__ == '__main__':
     checkpoint = torch.load('default_checkpoints/checkpoint_iter_65000.pth')
     load_state(net, checkpoint)
 
-    evaluate('data/val_subset.json', 'data/detections_65000.json', 'coco/val2017/', net, True, False)
+    evaluate('data/val_subset.json', 'data/detections_65000.json', 'coco/val2017/', net, True, True)

@@ -3,7 +3,7 @@ import json
 import random
 
 if __name__ == '__main__':
-    with open('coco/annotations/body25_val2017.json', 'r') as f:
+    with open('coco/annotations/person_keypoints_val2017.json', 'r') as f:
         data = json.load(f)
 
     random.seed(0)

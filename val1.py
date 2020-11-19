@@ -51,13 +51,16 @@ def convert_to_coco_format(pose_entries, all_keypoints):
     for n in range(len(pose_entries)):
         if len(pose_entries[n]) == 0:
             continue
-        keypoints = [0] * 23 * 3
-        to_coco_map = [0,-1,6,8,10,5,7,9,-1,12,14,16,11,13,15,2,1,4,3,17,18,19,20,21,22]
+        keypoints = [0] * 17 * 3
+        to_coco_map = [0,-1,6,8,10,5,7,9,-1,12,14,16,11,13,15,2,1,4,3,-1,-1,-1,-1,-1,-1]
         person_score = pose_entries[n][-2]
         position_id = -1
         for keypoint_id in pose_entries[n][:-2]:
             position_id += 1
-            if position_id == 1 or position_id == 8: # no 'neck', 'center hip'
+            # no 'neck', 'center hip', 'feet'
+            if position_id == 1 or position_id == 8 or \
+               position_id == 19 or position_id == 20 or position_id == 21 or \
+               position_id == 22 or position_id == 23 or position_id == 24:
                 continue
 
             cx, cy, score, visibility = 0, 0, 0, 0  # keypoint not found
@@ -70,7 +73,7 @@ def convert_to_coco_format(pose_entries, all_keypoints):
             keypoints[to_coco_map[position_id] * 3 + 1] = cy
             keypoints[to_coco_map[position_id] * 3 + 2] = visibility
         coco_keypoints.append(keypoints)
-        scores.append(person_score * max(0, (pose_entries[n][-1] - 2)))  # -2 for 'neck' and 'hip'
+        scores.append(person_score * max(0, (pose_entries[n][-1] - 8)))  # -1 for 'neck'
     return coco_keypoints, scores
 
 
@@ -178,7 +181,7 @@ if __name__ == '__main__':
     # evaluate(args.labels, args.output_name, args.images_folder, net, args.multiscale, args.visualize)
 
     net = PoseEstimationWithMobileNet(num_heatmaps=26, num_pafs=52)
-    checkpoint = torch.load('body25_checkpoints/checkpoint_iter_500.pth')
+    checkpoint = torch.load('body25_checkpoints/checkpoint_iter_5000.pth')
     load_state(net, checkpoint)
 
     evaluate('data/val_subset_1.json', 'data/detections.json', 'coco/val2017/', net, True, False)

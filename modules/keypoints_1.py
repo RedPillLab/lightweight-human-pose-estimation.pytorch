@@ -167,7 +167,7 @@ def group_keypoints(all_keypoints_by_type, pafs, pose_entry_size=20, min_paf_sco
                 pose_entries[i][BODY_PARTS_KPT_IDS[0][1]] = connections[i][1]
                 pose_entries[i][-1] = 2
                 pose_entries[i][-2] = np.sum(all_keypoints[connections[i][0:2], 2]) + connections[i][2]
-        elif part_id == 17 or part_id == 18:
+        elif part_id == 18 or part_id == 19:
             kpt_a_id = BODY_PARTS_KPT_IDS[part_id][0]
             kpt_b_id = BODY_PARTS_KPT_IDS[part_id][1]
             for i in range(len(connections)):
