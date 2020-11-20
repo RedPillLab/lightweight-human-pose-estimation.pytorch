@@ -67,6 +67,10 @@ def train(prepared_train_labels, train_images_folder, num_refinement_stages, bas
             load_state(net, checkpoint)
             if not weights_only:
                 optimizer.load_state_dict(checkpoint['optimizer'])
+                for state in optimizer.state.values():
+                    for k, v in state.items():
+                        if isinstance(v, torch.Tensor):
+                            state[k] = v.cuda()
                 scheduler.load_state_dict(checkpoint['scheduler'])
                 num_iter = checkpoint['iter']
                 current_epoch = checkpoint['current_epoch']
