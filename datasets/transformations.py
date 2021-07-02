@@ -105,6 +105,58 @@ class ConvertKeypoints1:
             converted_keypoints[1][2] = 2
         return converted_keypoints
 
+class ConvertKeypoints2:
+    def __call__(self, sample):
+        label = sample['label']
+        h, w, _ = sample['image'].shape
+        keypoints = label['keypoints']
+        for keypoint in keypoints:  # keypoint[2] == 0: occluded, == 1: visible, == 2: not in image
+            if keypoint[0] == keypoint[1] == 0:
+                keypoint[2] = 2
+            if (keypoint[0] < 0 or keypoint[0] >= w or keypoint[1] < 0 or keypoint[1] >= h):
+                keypoint[2] = 2
+        for other_label in label['processed_other_annotations']:
+            keypoints = other_label['keypoints']
+            for keypoint in keypoints:
+                if keypoint[0] == keypoint[1] == 0:
+                    keypoint[2] = 2
+                if (keypoint[0] < 0
+                        or keypoint[0] >= w
+                        or keypoint[1] < 0
+                        or keypoint[1] >= h):
+                    keypoint[2] = 2
+        label['keypoints'] = self._convert(label['keypoints'], w, h)
+
+        for other_label in label['processed_other_annotations']:
+            other_label['keypoints'] = self._convert(other_label['keypoints'], w, h)
+        return sample
+
+    def _convert(self, keypoints, w, h):
+        # Nose, Neck, R hand, L hand, R leg, L leg, Eyes, Ears
+        reorder_map = [1, 7,9,11, 6,8,10, 13,15,17, 12,14,16, 3,2,5,4, 18,21]
+        converted_keypoints = list(keypoints[i - 1] for i in reorder_map)
+
+        # Add neck as a mean of shoulders
+        converted_keypoints.insert(1, [(keypoints[5][0] + keypoints[6][0]) / 2,
+                                       (keypoints[5][1] + keypoints[6][1]) / 2, 0])
+        if keypoints[5][2] == 2 or keypoints[6][2] == 2:
+            converted_keypoints[1][2] = 2
+        elif keypoints[5][2] == 1 and keypoints[6][2] == 1:
+            converted_keypoints[1][2] = 1
+
+        # Add center hip
+        converted_keypoints.insert(8, [(keypoints[11][0] + keypoints[12][0]) / 2,
+                                       (keypoints[11][1] + keypoints[12][1]) / 2, 0])
+        if keypoints[11][2] == 2 or keypoints[12][2] == 2:
+            converted_keypoints[8][2] = 2
+        elif keypoints[11][2] == 1 and keypoints[12][2] == 1:
+            converted_keypoints[8][2] = 1
+
+        if converted_keypoints[1][0] < 0 or converted_keypoints[1][0] >= w or \
+           converted_keypoints[1][1] < 0 or converted_keypoints[1][1] >= h:
+            converted_keypoints[1][2] = 2
+        return converted_keypoints
+
 class Scale:
     def __init__(self, prob=1, min_scale=0.5, max_scale=1.1, target_dist=0.6):
         self._prob = prob
@@ -341,6 +393,41 @@ class Flip1:
     def _swap_left_right(self, keypoints):
         right = [2, 3, 4, 9, 10, 11, 15, 17, 22, 23, 24]
         left = [5, 6, 7, 12, 13, 14, 16, 18, 19, 20 ,21]
+        for r, l in zip(right, left):
+            keypoints[r], keypoints[l] = keypoints[l], keypoints[r]
+        return keypoints
+
+class Flip2:
+    def __init__(self, prob=0.5):
+        self._prob = prob
+
+    def __call__(self, sample):
+        prob = random.random()
+        do_flip = prob <= self._prob
+        if not do_flip:
+            return sample
+
+        sample['image'] = cv2.flip(sample['image'], 1)
+        sample['mask'] = cv2.flip(sample['mask'], 1)
+
+        label = sample['label']
+        w, h = label['img_width'], label['img_height']
+        label['objpos'][0] = w - 1 - label['objpos'][0]
+        for keypoint in label['keypoints']:
+            keypoint[0] = w - 1 - keypoint[0]
+        label['keypoints'] = self._swap_left_right(label['keypoints'])
+
+        for other_annotation in label['processed_other_annotations']:
+            other_annotation['objpos'][0] = w - 1 - other_annotation['objpos'][0]
+            for keypoint in other_annotation['keypoints']:
+                keypoint[0] = w - 1 - keypoint[0]
+            other_annotation['keypoints'] = self._swap_left_right(other_annotation['keypoints'])
+
+        return sample
+
+    def _swap_left_right(self, keypoints):
+        right = [2, 3, 4, 9, 10, 11, 15, 17, 20]
+        left = [5, 6, 7, 12, 13, 14, 16, 18, 19]
         for r, l in zip(right, left):
             keypoints[r], keypoints[l] = keypoints[l], keypoints[r]
         return keypoints
