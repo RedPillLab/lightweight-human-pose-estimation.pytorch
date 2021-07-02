@@ -45,7 +45,6 @@ class InitialStage(nn.Module):
 class RefinementStageBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
-<<<<<<< HEAD
         self.initial1 = conv(in_channels, out_channels//2, kernel_size=1, padding=0, bn=False)
         self.trunk1 = nn.Sequential(
             conv(out_channels//2, out_channels//2),
@@ -65,57 +64,30 @@ class RefinementStageBlock(nn.Module):
         trunk_features2 = self.trunk2(initial_features2)
         x2 = initial_features2 + trunk_features2
         return torch.cat([x1, x2], dim=1)
-=======
-        self.initial = None
-        if in_channels != out_channels:
-            self.initial = conv(in_channels, out_channels, 1, 0, bn=False)
-        self.trunk = nn.Sequential(
-            conv(out_channels, out_channels),
-            conv(out_channels, out_channels, dilation=2, padding=2)
-        )
-
-    def forward(self, x):
-        if self.initial:
-            x = self.initial(x)
-        trunk_features = self.trunk(x)
-        return x + trunk_features
-
->>>>>>> 7093f20a821dbc3bbb10bcbddbb487de6766d2c5
 
 class RefinementStage(nn.Module):
     def __init__(self, in_channels, out_channels, num_heatmaps, num_pafs):
         super().__init__()
-        self.branch1 = RefinementStageBlock(in_channels, out_channels[0])
-        self.branch2 = nn.Sequential(
-            RefinementStageBlock(in_channels, out_channels[1]),
-            RefinementStageBlock(out_channels[1], out_channels[1]),
-            RefinementStageBlock(out_channels[1], out_channels[1])
+        self.trunk = nn.Sequential(
+            RefinementStageBlock(in_channels, out_channels),
+            RefinementStageBlock(out_channels, out_channels),
+            RefinementStageBlock(out_channels, out_channels),
+            RefinementStageBlock(out_channels, out_channels),
+            RefinementStageBlock(out_channels, out_channels)
         )
-        self.branch3 = nn.Sequential(
-            RefinementStageBlock(in_channels, out_channels[2]),
-            RefinementStageBlock(out_channels[2], out_channels[2]),
-            RefinementStageBlock(out_channels[2], out_channels[2]),
-            RefinementStageBlock(out_channels[2], out_channels[2]),
-            RefinementStageBlock(out_channels[2], out_channels[2])
-        )
-        n = out_channels[0] + out_channels[1] + out_channels[2]
-
         self.heatmaps = nn.Sequential(
-            conv(n, n, kernel_size=1, padding=0, bn=False),
-            conv(n, num_heatmaps, kernel_size=1, padding=0, bn=False, relu=False)
+            conv(out_channels, out_channels, kernel_size=1, padding=0, bn=False),
+            conv(out_channels, num_heatmaps, kernel_size=1, padding=0, bn=False, relu=False)
         )
         self.pafs = nn.Sequential(
-            conv(n, n, kernel_size=1, padding=0, bn=False),
-            conv(n, num_pafs, kernel_size=1, padding=0, bn=False, relu=False)
+            conv(out_channels, out_channels, kernel_size=1, padding=0, bn=False),
+            conv(out_channels, num_pafs, kernel_size=1, padding=0, bn=False, relu=False)
         )
-    
+
     def forward(self, x):
-        features1 = self.branch1(x)
-        features2 = self.branch2(x)
-        features3 = self.branch3(x)
-        features = torch.cat([features1, features2, features3], dim=1)
-        heatmaps = self.heatmaps(features)
-        pafs = self.pafs(features)
+        trunk_features = self.trunk(x)
+        heatmaps = self.heatmaps(trunk_features)
+        pafs = self.pafs(trunk_features)
         return [heatmaps, pafs]
         #return torch.cat([heatmaps, pafs], dim=1)
 
@@ -140,10 +112,9 @@ class PoseEstimationWithMobileNet(nn.Module):
 
         self.initial_stage = InitialStage(num_channels, num_heatmaps, num_pafs)
         self.refinement_stages = nn.ModuleList()
-        channels = [num_channels//8, num_channels//8*3, num_channels//2]
         for idx in range(num_refinement_stages):
-            self.refinement_stages.append(RefinementStage(num_channels + num_heatmaps + num_pafs,
-                                                          channels, num_heatmaps, num_pafs))
+            self.refinement_stages.append(RefinementStage(num_channels + num_heatmaps + num_pafs, num_channels,
+                                                          num_heatmaps, num_pafs))
 
     def forward(self, x):
         backbone_features = self.model(x)
