@@ -1,8 +1,6 @@
 import torch
 from torch import nn
-
 from modules.conv import conv, conv_dw, conv_dw_no_bn
-
 
 class Cpm(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -44,21 +42,28 @@ class InitialStage(nn.Module):
         pafs = self.pafs(trunk_features)
         return [heatmaps, pafs]
 
-
 class RefinementStageBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.initial = conv(in_channels, out_channels, kernel_size=1, padding=0, bn=False)
-        self.trunk = nn.Sequential(
-            conv(out_channels, out_channels),
-            conv(out_channels, out_channels, dilation=2, padding=2)
+        self.initial1 = conv(in_channels, out_channels//2, kernel_size=1, padding=0, bn=False)
+        self.trunk1 = nn.Sequential(
+            conv(out_channels//2, out_channels//2),
+            conv(out_channels//2, out_channels//2, dilation=2, padding=2)
+        )
+        self.initial2 = conv(in_channels, out_channels//2, kernel_size=1, padding=0, bn=False)
+        self.trunk2 = nn.Sequential(
+            conv(out_channels//2, out_channels//2),
+            conv(out_channels//2, out_channels//2, dilation=2, padding=2)
         )
 
     def forward(self, x):
-        initial_features = self.initial(x)
-        trunk_features = self.trunk(initial_features)
-        return initial_features + trunk_features
-
+        initial_features1 = self.initial1(x)
+        trunk_features1 = self.trunk1(initial_features1)
+        x1 = initial_features1 + trunk_features1
+        initial_features2 = self.initial2(x)
+        trunk_features2 = self.trunk2(initial_features2)
+        x2 = initial_features2 + trunk_features2
+        return torch.cat([x1, x2], dim=1)
 
 class RefinementStage(nn.Module):
     def __init__(self, in_channels, out_channels, num_heatmaps, num_pafs):
@@ -84,7 +89,7 @@ class RefinementStage(nn.Module):
         heatmaps = self.heatmaps(trunk_features)
         pafs = self.pafs(trunk_features)
         return [heatmaps, pafs]
-
+        #return torch.cat([heatmaps, pafs], dim=1)
 
 class PoseEstimationWithMobileNet(nn.Module):
     def __init__(self, num_refinement_stages=1, num_channels=128, num_heatmaps=19, num_pafs=38):
@@ -121,3 +126,4 @@ class PoseEstimationWithMobileNet(nn.Module):
                 refinement_stage(torch.cat([backbone_features, stages_output[-2], stages_output[-1]], dim=1)))
 
         return stages_output
+        #return torch.cat([stages_output[-2], stages_output[-1]], dim=1)

@@ -180,6 +180,7 @@ if __name__ == '__main__':
     checkpoint = torch.load('body25_checkpoints/checkpoint_iter_465000.pth', map_location='cpu')
     load_state(net, checkpoint)
 
-    frame_provider = VideoReader('D:/projects/MotioNet/video/beyonce.mp4')
+    # frame_provider = VideoReader('D:/projects/MotioNet/video/beyonce.mp4')
+    frame_provider = VideoReader("D:/projects/VideoPoseSDK/video/test32.mp4")
 
-    run_demo(net, frame_provider, 256, False, True, True)
+    run_demo(net, frame_provider, 288, False, False, False)
