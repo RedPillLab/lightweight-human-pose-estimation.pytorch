@@ -162,7 +162,7 @@ if __name__ == '__main__':
     parser.add_argument('--weights-only', action='store_true',
                         help='just initialize layers with pre-trained weights \
                               and start training from the beginning')
-    parser.add_argument('--experiment-name', type=str, default='body25',
+    parser.add_argument('--experiment-name', type=str, default='body21',
                         help='experiment name to create folder for checkpoints')
     parser.add_argument('--log-after', type=int, default=100,
                         help='number of iterations to print train loss')
